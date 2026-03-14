@@ -2,7 +2,7 @@ import axios from 'axios';
 
 const isProduction = import.meta.env.PROD;
 export const API_URL = isProduction 
-    ? "https://second-brain-2-gwgk.onrender.com/api/v1" 
+    ? "https://brainly-p75h.onrender.com/api/v1" 
     : "http://localhost:3000/api/v1";
 console.log("Initialize API client:", API_URL);
 

@@ -53,15 +53,17 @@ const PORT = process.env.PORT || 3000;
 const MONGO_URL = process.env.MONGO_URL || "mongodb://localhost:27017/secondbrain";
 
 mongoose.connect(MONGO_URL).then(() => {
-    console.log("MongoDB Connected");
-    if (require.main === module) {
-        app.listen(PORT, () => {
-            console.log(`server running on ${PORT}...`);
-        });
-    }
+    console.log("MongoDB Connected successfully");
+    
+    // Start server unconditionally
+    app.listen(PORT, '0.0.0.0', () => {
+        console.log(`Server running on port ${PORT}...`);
+    });
 })
 .catch((err) => {
-    console.log("MongoDB connection error:", err);
+    console.error("CRITICAL: MongoDB connection error:", err);
+    // Exit with failure code so Render registers the crash
+    process.exit(1); 
 });
 
 module.exports = app;

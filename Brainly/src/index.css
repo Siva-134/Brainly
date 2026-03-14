@@ -1,0 +1,61 @@
+@import "tailwindcss";
+@variant dark (&:where(.dark, .dark *));
+
+@layer base {
+  html {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+    font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  }
+
+  /* Force subpixel antialiasing for Windows */
+  body {
+    @apply antialiased;
+    font-family: 'Inter', sans-serif;
+  }
+
+  img {
+    image-rendering: -webkit-optimize-contrast;
+    /* Webkit specific sharpener */
+    image-rendering: crisp-edges;
+  }
+  
+  /* Optimize scroll performance to eliminate lag */
+  .scrollbar-thin {
+    scrollbar-width: thin;
+    overscroll-behavior-y: contain; /* Prevents bounce lag */
+  }
+}
+
+@layer utilities {
+  .animate-blob {
+    animation: blob 7s infinite;
+  }
+
+  .animation-delay-2000 {
+    animation-delay: 2s;
+  }
+
+  .animation-delay-4000 {
+    animation-delay: 4s;
+  }
+}
+
+@keyframes blob {
+  0% {
+    transform: translate(0px, 0px) scale(1);
+  }
+
+  33% {
+    transform: translate(30px, -50px) scale(1.1);
+  }
+
+  66% {
+    transform: translate(-20px, 20px) scale(0.9);
+  }
+
+  100% {
+    transform: translate(0px, 0px) scale(1);
+  }
+}

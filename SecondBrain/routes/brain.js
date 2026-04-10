@@ -8,30 +8,31 @@ require("dotenv").config();
 // Initialize model dynamically
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
-async function getModel() {
-    try {
-        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${process.env.GEMINI_API_KEY}`);
-        const data = await response.json();
-        
-        let modelName = 'gemini-pro'; // Default to stable gemini-pro
+async function generateWithFallback(prompt) {
+    const fallbackModels = [
+        "gemini-2.5-flash",
+        "gemini-flash-latest",
+        "gemini-2.0-flash",
+        "gemini-flash-lite-latest"
+    ];
 
-        if (data.models) {
-            const validModels = data.models
-                .filter(m => m.supportedGenerationMethods.includes('generateContent'))
-                .map(m => m.name.replace('models/', ''));
-
-            // prefer gemini-pro as it is globally compatible, otherwise use what's available
-            const preferred = validModels.find(m => m === 'gemini-pro') || validModels[0];
-            
-            if (preferred) modelName = preferred;
+    let lastError;
+    for (const modelName of fallbackModels) {
+        try {
+            const model = genAI.getGenerativeModel({ model: modelName });
+            const result = await model.generateContent(prompt);
+            return result;
+        } catch (e) {
+            lastError = e;
+            const msg = (e.message || "").toLowerCase();
+            if (msg.includes("503") || msg.includes("overloaded") || msg.includes("high demand") || msg.includes("service unavailable")) {
+                console.log(`[API High Demand] ${modelName} is busy, retrying with next model...`);
+                continue;
+            }
+            throw e;
         }
-        
-        console.log(`Using Gemini Model: ${modelName}`);
-        return genAI.getGenerativeModel({ model: modelName });
-    } catch (e) {
-        console.error("Error selecting model:", e);
-        return genAI.getGenerativeModel({ model: "gemini-pro" });
     }
+    throw lastError;
 }
 
 router.post("/ask-brain", userAuth, async (req, res) => {
@@ -43,7 +44,7 @@ router.post("/ask-brain", userAuth, async (req, res) => {
         const userContent = await Content.find({ userId: userId });
         
         // Prepare context from user's content
-        const context = userContent.map(c => `Title: ${c.title}\nType: ${c.type}\nTags: ${c.tags.join(", ")}\nLink: ${c.link}\nDescription: ${c.description || ""}`).join("\n\n");
+        const context = userContent.map(c => `Title: ${c.title}\nType: ${c.type}\nTags: ${c.tags ? c.tags.join(", ") : "None"}\nLink: ${c.link}\nDescription: ${c.description || ""}`).join("\n\n");
 
         const historyText = history && Array.isArray(history) ? history.map(h => `${h.role === 'ai' ? 'Assistant' : 'User'}: ${h.content}`).join('\n') : "No previous history.";
 
@@ -65,8 +66,8 @@ router.post("/ask-brain", userAuth, async (req, res) => {
         5. CRITICAL: NO MATTER WHAT, AT THE VERY END OF YOUR RESPONSE, you MUST literally append this exact sentence on a new line: "Would you like me to generate more test questions about this topic? (Yes/No)"
         `;
 
-        const model = await getModel();
-        const result = await model.generateContent(prompt);
+        // Fallback to avoid 503
+        const result = await generateWithFallback(prompt);
         const response = await result.response;
         const text = response.text();
 

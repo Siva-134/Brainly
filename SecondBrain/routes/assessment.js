@@ -7,26 +7,38 @@ require("dotenv").config();
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
-async function getModel() {
-    try {
-        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${process.env.GEMINI_API_KEY}`);
-        const data = await response.json();
-        
-        let modelName = 'gemini-pro'; 
+async function generateWithFallback(prompt) {
+    const fallbackModels = [
+        "gemini-2.5-flash",
+        "gemini-flash-latest",
+        "gemini-2.0-flash",
+        "gemini-flash-lite-latest"
+    ];
 
-        if (data.models) {
-            const validModels = data.models
-                .filter(m => m.supportedGenerationMethods.includes('generateContent'))
-                .map(m => m.name.replace('models/', ''));
-
-            const preferred = validModels.find(m => m === 'gemini-pro') || validModels[0];
-            
-            if (preferred) modelName = preferred;
+    let lastError;
+    for (const modelName of fallbackModels) {
+        try {
+            const model = genAI.getGenerativeModel({ 
+                model: modelName,
+                generationConfig: {
+                    responseMimeType: "application/json"
+                }
+            });
+            const result = await model.generateContent(prompt);
+            return result;
+        } catch (e) {
+            lastError = e;
+            const msg = (e.message || "").toLowerCase();
+            // If it's a 503 or overload error, we catch it and loop to try the next model silently
+            if (msg.includes("503") || msg.includes("overloaded") || msg.includes("high demand") || msg.includes("service unavailable")) {
+                console.log(`[API High Demand] ${modelName} is busy, retrying with next model...`);
+                continue;
+            }
+            throw e; // If it's a real breaking error (like a bad prompt), throw it immediately
         }
-        return genAI.getGenerativeModel({ model: modelName });
-    } catch (e) {
-        return genAI.getGenerativeModel({ model: "gemini-pro" });
     }
+    // If all models are completely bogged down, throw the final error
+    throw lastError;
 }
 
 router.post("/generate-assessment", userAuth, async (req, res) => {
@@ -73,7 +85,7 @@ router.post("/generate-assessment", userAuth, async (req, res) => {
                  return res.status(400).json({ message: "No content found in this project to generate an assessment." });
              }
  
-             const context = projectContent.map(c => `Title: ${c.title}\nType: ${c.type}\nTags: ${c.tags.join(", ")}\nDescription: ${c.description || ""}`).join("\n\n");
+             const context = projectContent.map(c => `Title: ${c.title}\nType: ${c.type}\nTags: ${c.tags ? c.tags.join(", ") : "None"}\nDescription: ${c.description || ""}`).join("\n\n");
  
              prompt = `You are an AI assessment generator. 
              Analyze the user's saved knowledge base context from a specific project below to identify the core topics and subjects they are learning about.
@@ -106,7 +118,7 @@ router.post("/generate-assessment", userAuth, async (req, res) => {
                 return res.status(400).json({ message: "Not enough content to generate assessment. Add some content first." });
             }
 
-            const context = userContent.map(c => `Title: ${c.title}\nType: ${c.type}\nTags: ${c.tags.join(", ")}\nDescription: ${c.description || ""}`).join("\n\n");
+            const context = userContent.map(c => `Title: ${c.title}\nType: ${c.type}\nTags: ${c.tags ? c.tags.join(", ") : "None"}\nDescription: ${c.description || ""}`).join("\n\n");
 
             prompt = `You are an AI assessment generator. 
             Analyze the user's saved knowledge base context below to identify the core topics and subjects they are learning about (e.g., AWS, React, DevOps, etc.).
@@ -134,14 +146,11 @@ router.post("/generate-assessment", userAuth, async (req, res) => {
             DO NOT include markdown code block syntax (like \`\`\`json) in your answer, just provide the raw JSON.`;
         }
 
-        const model = await getModel();
-        const result = await model.generateContent(prompt);
+        // Automatically try multiple models in case Google's servers are overloaded
+        const result = await generateWithFallback(prompt);
         const response = await result.response;
         let text = response.text();
-        
-        // Clean up text if it contains markdown code block
-        text = text.replace(/```json/g, '').replace(/```/g, '').trim();
-
+        text = text.replace(/```json\n?|```/g, '').trim();
         const questions = JSON.parse(text);
 
         res.json({
@@ -150,6 +159,7 @@ router.post("/generate-assessment", userAuth, async (req, res) => {
 
     } catch (e) {
         console.error("AI Error:", e);
+        require("fs").writeFileSync("assessment_error.log", String(e.stack || e.message || e));
         res.status(500).json({ 
             message: "Error generating assessment",
             error: e.message

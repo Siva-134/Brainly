@@ -22,7 +22,12 @@ router.post('/resume/test', upload.single('resume'), async (req, res) => {
             resumeText = req.file.buffer.toString('utf-8');
         }
 
-        const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+        const model = genAI.getGenerativeModel({ 
+            model: "gemini-2.5-flash",
+            generationConfig: {
+                responseMimeType: "application/json"
+            }
+        });
         const prompt = `You are a strict technical interviewer. Review the following resume text and generate a test evaluating the candidate's skills mentioned in the resume. 
 The test should contain:
 1. 5 multiple choice questions testing their core skills.
@@ -78,7 +83,12 @@ router.post('/resume/ats', upload.single('resume'), async (req, res) => {
             resumeText = req.file.buffer.toString('utf-8');
         }
 
-        const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+        const model = genAI.getGenerativeModel({ 
+            model: "gemini-2.5-flash",
+            generationConfig: {
+                responseMimeType: "application/json"
+            }
+        });
         const prompt = `You are an expert ATS (Applicant Tracking System). Review the following resume against the provided Job Description.
 Calculate an ATS score from 0 to 100 based on keyword match, experience relevance, and skills.
 Provide feedback on what the user needs to update or change to improve their score for this specific job.

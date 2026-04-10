@@ -9,10 +9,10 @@ const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
 async function generateWithFallback(prompt) {
     const fallbackModels = [
-        "gemini-2.5-flash",
-        "gemini-flash-latest",
-        "gemini-2.0-flash",
-        "gemini-flash-lite-latest"
+        "gemini-1.5-flash",
+        "gemini-1.5-flash-8b",
+        "gemini-1.5-pro",
+        "gemini-1.0-pro"
     ];
 
     let lastError;
@@ -29,15 +29,14 @@ async function generateWithFallback(prompt) {
         } catch (e) {
             lastError = e;
             const msg = (e.message || "").toLowerCase();
-            // If it's a 503 or overload error, we catch it and loop to try the next model silently
-            if (msg.includes("503") || msg.includes("overloaded") || msg.includes("high demand") || msg.includes("service unavailable")) {
-                console.log(`[API High Demand] ${modelName} is busy, retrying with next model...`);
+            // Catch overloaded, quota limit (429), or missing model (404) errors to fallback
+            if (msg.includes("503") || msg.includes("429") || msg.includes("404") || msg.includes("overloaded") || msg.includes("quota") || msg.includes("not found") || msg.includes("service unavailable")) {
+                console.log(`[API Issue] ${modelName} failed (${msg.substring(0, 50)}...), retrying next model...`);
                 continue;
             }
-            throw e; // If it's a real breaking error (like a bad prompt), throw it immediately
+            throw e; // Real syntax/prompt error
         }
     }
-    // If all models are completely bogged down, throw the final error
     throw lastError;
 }
 
